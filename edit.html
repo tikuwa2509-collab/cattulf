@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CatTulf — Edit (メモ欄 x8 追加)</title>
+  <title>CatTulf — Edit (Full + Firebase)</title>
   <style>
     :root{--bg:#0b0c10;--card:#16171d;--muted:#8a8f98;--fg:#e7e9ee;--acc:#6aa1ff;--danger:#ff6b6b}
     *{box-sizing:border-box}
@@ -63,12 +63,36 @@
     .field-row label{min-width:140px;color:var(--muted);}
     .field-row textarea{flex:1;min-height:52px}
     .field-row input[type="text"]{flex:1}
+    .auth-area{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .cloud-btn{background:#7bd389;color:#051009;font-weight:700}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>CatTulf</h1>
-    <p class="small">それぞれのメモ欄は折りたたみ・ビュー表示のオンオフが可能。保存・読み込み・JSON 出力に反映されます。</p>
+    <p class="small">全機能版（ローカル保存 / 公開 / メモ x8 / スキル体系 / Cocofolia 出力）＋ Firebase クラウド保存（Email/Password）対応。</p>
+
+    <!-- 認証エリア -->
+    <div class="card auth-area" id="authCard">
+      <div style="flex:1;min-width:240px">
+        <div class="small">クラウド保存（Firebase）: ログインするとクラウドに保存・公開できます。</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <input id="authEmail" placeholder="メールアドレス" />
+          <input id="authPwd" type="password" placeholder="パスワード" />
+          <button id="btnSignUp" class="ghost btn-small">会員登録</button>
+          <button id="btnSignIn" class="btn-small">サインイン</button>
+          <button id="btnReset" class="ghost btn-small">パスワード再発行</button>
+          <button id="btnLogout" class="ghost btn-small" style="display:none">ログアウト</button>
+        </div>
+      </div>
+      <div class="row-actions" style="align-items:center">
+        <div id="userArea" class="small-grey">未ログイン</div>
+        <div style="width:12px"></div>
+        <button id="saveCloudBtn" class="cloud-btn btn-small" disabled>クラウドに保存</button>
+        <button id="publishCloudBtn" class="cloud-btn btn-small" disabled>クラウドで公開</button>
+        <button id="cloudListBtn" class="ghost btn-small">クラウド一覧</button>
+      </div>
+    </div>
 
     <div class="grid">
       <!-- 基本情報 -->
@@ -253,12 +277,65 @@
     </div>
   </div>
 
-<script>
+<script type="module">
+/* ========================================================
+   完全版: フル機能 + Firebase (Email/Password) 統合
+   - ※ 必須: 下の firebaseConfig をあなたの値に差し替える
+   - Firebase: Authentication (Email/Password) を有効にしてください
+   - Firestore ルールは「ユーザーのみ自分の documents 書込 / publicCharacters は read-only」推奨
+======================================================== */
+
+/* ================= Firebase 設定 ================= */
+/* Firebase の設定をここに貼り替えてください (firebaseConfig) */
+const firebaseConfig = {
+  // 例:
+  // apiKey: "AIza...EXAMPLE",
+  // authDomain: "your-project-id.firebaseapp.com",
+  // projectId: "your-project-id",
+  // storageBucket: "your-project-id.appspot.com",
+  // messagingSenderId: "1234567890",
+  // appId: "1:1234567890:web:abcdef123456"
+};
+
+/* ===== Firebase import (modular) ===== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  sendPasswordResetEmail,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  orderBy,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+/* ===== Firebase 初期化（firebaseConfig を差し替えてから有効） ===== */
+let app=null, auth=null, db=null;
+try{
+  if(firebaseConfig && firebaseConfig.projectId){
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+  } else {
+    console.warn('firebaseConfig が未設定です。クラウド機能は無効になります。');
+  }
+}catch(e){ console.error('Firebase init error', e); }
+
 /* ======= ユーティリティ ======= */
 function rInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
 function rollNdM(n,m){let t=0;for(let i=0;i<n;i++) t+=rInt(1,m);return t;}
-function setVal(id,v){document.getElementById(id).value = v;}
-function getNum(id){return Number(document.getElementById(id).value||0);}
+function setVal(id,v){ const el=document.getElementById(id); if(el) el.value = (v===undefined||v===null)?'':String(v); }
+function getNum(id){ const el=document.getElementById(id); return Number(el && el.value ? el.value : 0); }
 function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* ======= DB（ダメージボーナス）計算 ======= */
@@ -285,7 +362,7 @@ function dbExprForRoll(sum){ const label = computeDBLabel(sum); if(label === '0'
 
 /* ======= 猫用ロール / 二次値（HPは切り上げ） ======= */
 function rollAll(){
-  setVal('STR', rollNdM(1,3));
+  setVal('STR', rInt(1,3));
   setVal('CON', Math.max(rollNdM(2,6),4));
   setVal('SIZ', 1);
   setVal('INT', rollNdM(2,6)+6);
@@ -295,6 +372,7 @@ function rollAll(){
   setVal('POW', rollNdM(2,6)+6);
   derive();
   recalcAllSkills();
+  updateOut();
 }
 function clearAll(){
   ['STR','CON','POW','DEX','APP','SIZ','INT','EDU','HP','MP','SEN','IDEA','LUCK','KNOW','DB','SENmax'].forEach(id=>setVal(id,0));
@@ -322,7 +400,7 @@ function derive(){
   computeAndDisplayMaxSEN();
 }
 
-/* ======= 技能定義（省略：前のまま） ======= */
+/* ======= 技能定義 ======= */
 const DEFAULT_CATEGORIES = {
   "戦闘技能": [
     {name:"回避", initialRaw:"{DEX}*4"},
@@ -372,7 +450,7 @@ const DEFAULT_CATEGORIES = {
   ]
 };
 
-/* ======= SKILLS 管理（省略／前のまま） ======= */
+/* ======= SKILLS 管理 ======= */
 let SKILLS = [];
 const skillsTbody = document.querySelector('#skillsTable tbody');
 const allocStatusEl = document.getElementById('allocStatus');
@@ -386,12 +464,7 @@ function buildCategoryToggles(){
     btn.dataset.cat = cat;
     btn.textContent = cat + '（表示）';
     btn.dataset.visible = '1';
-    btn.addEventListener('click', ()=>{
-      const visible = btn.dataset.visible === '1';
-      btn.dataset.visible = visible ? '0' : '1';
-      btn.textContent = cat + (visible ? '（非表示）' : '（表示）');
-      toggleCategoryVisibility(cat, !visible);
-    });
+    btn.addEventListener('click', ()=>{ const visible = btn.dataset.visible === '1'; btn.dataset.visible = visible ? '0' : '1'; btn.textContent = cat + (visible ? '（非表示）' : '（表示）'); toggleCategoryVisibility(cat, !visible); });
     categoryTogglesEl.appendChild(btn);
   });
 }
@@ -412,7 +485,6 @@ function computeInitialValue(initialRaw, paramsMap){
   try{ return Number(Function('"use strict"; return (' + replaced + ')')()); }catch(e){return NaN;}
 }
 
-/* SKILLS のレンダリング・イベントは以前と同様（省略せず実装） */
 function renderSkills(){
   skillsTbody.innerHTML = '';
   const paramsMap = { STR:getNum('STR'), CON:getNum('CON'), POW:getNum('POW'), DEX:getNum('DEX'), APP:getNum('APP'), SIZ:getNum('SIZ'), INT:getNum('INT'), EDU:getNum('EDU') };
@@ -456,9 +528,7 @@ function renderSkills(){
     });
   });
 
-  document.querySelectorAll('.add-cat-skill').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{ const cat = e.currentTarget.dataset.cat || Object.keys(DEFAULT_CATEGORIES)[0]; addSkillForCategory(cat); });
-  });
+  document.querySelectorAll('.add-cat-skill').forEach(btn=>{ btn.addEventListener('click', (e)=>{ const cat = e.currentTarget.dataset.cat || Object.keys(DEFAULT_CATEGORIES)[0]; addSkillForCategory(cat); }); });
 
   attachSkillEvents();
   recalcAllSkills();
@@ -769,7 +839,7 @@ function buildJson(){
 function pretty(){ return JSON.stringify(buildJson(), null, 2); }
 function updateOut(){ document.getElementById('out').textContent = pretty(); }
 
-/* ======= 保存等 ======= */
+/* ======= 保存等（ローカル） ======= */
 const STORAGE_PREFIX = 'cattulf_v1_';
 let CURRENT_ID = null;
 function newId(){ return 'cat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
@@ -906,7 +976,217 @@ function openViewPage(){
   window.location.href = url;
 }
 
-/* イベントバインド */
+/* ======= Firebase: 認証 / クラウド保存 / 公開 / 取得 ======== */
+
+let currentUser = null;
+
+async function signUpEmail(){
+  if(!auth) return alert('Firebase 未設定。firebaseConfig を差し替えてください。');
+  const email = document.getElementById('authEmail').value.trim();
+  const pwd = document.getElementById('authPwd').value;
+  if(!email || !pwd) return alert('メールとパスワードを入力してください');
+  try{
+    const cred = await createUserWithEmailAndPassword(auth, email, pwd);
+    alert('アカウントを作成しました: ' + (cred.user.email||''));
+    // UI は onAuthStateChanged で更新される
+  }catch(err){
+    alert('登録に失敗しました: ' + err.message);
+    console.error(err);
+  }
+}
+async function signInEmail(){
+  if(!auth) return alert('Firebase 未設定。firebaseConfig を差し替えてください。');
+  const email = document.getElementById('authEmail').value.trim();
+  const pwd = document.getElementById('authPwd').value;
+  if(!email || !pwd) return alert('メールとパスワードを入力してください');
+  try{
+    const cred = await signInWithEmailAndPassword(auth, email, pwd);
+    alert('ログインしました: ' + (cred.user.email||''));
+  }catch(err){
+    alert('ログインに失敗しました: ' + err.message);
+    console.error(err);
+  }
+}
+async function doSignOut(){
+  if(!auth) return alert('Firebase 未設定。');
+  try{
+    await signOut(auth);
+    alert('ログアウトしました');
+  }catch(err){
+    alert('ログアウト失敗: '+err.message);
+  }
+}
+async function resetPassword(){
+  if(!auth) return alert('Firebase 未設定。');
+  const email = document.getElementById('authEmail').value.trim();
+  if(!email) return alert('再発行するメールアドレスを入力してください');
+  try{
+    await sendPasswordResetEmail(auth, email);
+    alert('再発行メールを送信しました。メールを確認してください。');
+  }catch(err){
+    alert('再発行失敗: ' + err.message);
+  }
+}
+
+onAuthStateChanged(auth || {onAuthStateChanged: ()=>{}}, (user)=>{
+  // when auth is null, this still runs once with undefined; guard
+  currentUser = user || null;
+  const ua = document.getElementById('userArea');
+  const loginVisible = !!currentUser;
+  if(currentUser){
+    ua.textContent = `ログイン: ${currentUser.email || currentUser.uid}`;
+    document.getElementById('btnSignIn').style.display='none';
+    document.getElementById('btnSignUp').style.display='none';
+    document.getElementById('btnReset').style.display='none';
+    document.getElementById('btnLogout').style.display='';
+    document.getElementById('saveCloudBtn').disabled = false;
+    document.getElementById('publishCloudBtn').disabled = false;
+  } else {
+    ua.textContent = '未ログイン';
+    document.getElementById('btnSignIn').style.display='';
+    document.getElementById('btnSignUp').style.display='';
+    document.getElementById('btnReset').style.display='';
+    document.getElementById('btnLogout').style.display='none';
+    document.getElementById('saveCloudBtn').disabled = true;
+    document.getElementById('publishCloudBtn').disabled = true;
+  }
+  // update saved list if user changed
+  renderSavedListCloud();
+});
+
+/* 保存（クラウド: users/{uid}/characters/{id}） */
+async function saveToCloud(){
+  if(!db || !currentUser) return alert('ログインが必要です、または Firebase 未設定です。');
+  try{
+    if(!CURRENT_ID) CURRENT_ID = newId();
+    const payload = buildJson();
+    payload.id = CURRENT_ID;
+    const docRef = doc(db, 'users', currentUser.uid, 'characters', CURRENT_ID);
+    await setDoc(docRef, {
+      name: payload.data.name || ('無題'),
+      ownerId: currentUser.uid,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      data: payload,
+      isPublic: false,
+      publicId: null
+    });
+    alert('クラウドに保存しました（ID: '+CURRENT_ID+'）');
+    reflectIdPill();
+    renderSavedListCloud();
+  }catch(e){ alert('クラウド保存失敗: '+e.message); console.error(e); }
+}
+
+/* 公開（publicCharacters にコピー） */
+async function publishToCloud(){
+  if(!db || !currentUser) return alert('ログインが必要です、または Firebase 未設定です。');
+  try{
+    if(!CURRENT_ID) { alert('まず保存してください（ローカルまたはクラウド）。'); return; }
+    // ensure saved to cloud first
+    await saveToCloud();
+    const docRefUser = doc(db, 'users', currentUser.uid, 'characters', CURRENT_ID);
+    const userSnap = await getDoc(docRefUser);
+    if(!userSnap.exists()) return alert('ユーザーデータが見つかりません');
+    const userData = userSnap.data();
+    await setDoc(doc(db, 'publicCharacters', CURRENT_ID), {
+      name: userData.name || '無題',
+      ownerId: currentUser.uid,
+      createdAt: userData.createdAt || new Date(),
+      updatedAt: new Date(),
+      preview: { name: userData.name || '無題' }
+    });
+    // mark user's doc
+    await setDoc(docRefUser, { isPublic:true, publicId:CURRENT_ID }, { merge:true });
+    alert('公開しました（ID: '+CURRENT_ID+'）');
+    renderSavedListCloud();
+  }catch(e){ alert('公開に失敗しました: '+e.message); console.error(e); }
+}
+
+/* 自分のクラウド保存一覧を取得して表示（簡易） */
+async function renderSavedListCloud(){
+  const container = document.getElementById('savedList');
+  if(!container) return;
+  container.innerHTML = '';
+  if(!currentUser || !db){ container.textContent = 'クラウド: ログイン後に表示されます'; return; }
+  try{
+    const col = collection(db, 'users', currentUser.uid, 'characters');
+    const snaps = await getDocs(col);
+    if(snaps.empty){ container.textContent = 'クラウドに保存されたキャラはありません'; return; }
+    let html = '<ul>';
+    snaps.forEach(s=>{
+      const d = s.data();
+      html += `<li>${escapeHtml(d.name||s.id)} — <button class="loadCloudBtn" data-id="${s.id}">読み込み</button> <button class="publishCloudBtn" data-id="${s.id}">公開</button> <button class="deleteCloudBtn" data-id="${s.id}">削除</button></li>`;
+    });
+    html += '</ul>';
+    container.innerHTML = html;
+    container.querySelectorAll('.loadCloudBtn').forEach(b=>b.addEventListener('click', async (ev)=>{
+      const id = ev.target.dataset.id;
+      const snap = await getDoc(doc(db, 'users', currentUser.uid, 'characters', id));
+      if(!snap.exists()) return alert('見つかりません');
+      applyJsonToUI(snap.data().data);
+      CURRENT_ID = id; reflectIdPill();
+      alert('クラウドから読み込みました');
+    }));
+    container.querySelectorAll('.publishCloudBtn').forEach(b=>b.addEventListener('click', async (ev)=>{
+      const id = ev.target.dataset.id;
+      if(!confirm('公開しますか？（誰でも閲覧可能になります）')) return;
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid, 'characters', id));
+      if(!userDoc.exists()) return alert('見つからない');
+      const data = userDoc.data();
+      await setDoc(doc(db, 'publicCharacters', id), {
+        name: data.name,
+        ownerId: currentUser.uid,
+        createdAt: data.createdAt,
+        updatedAt: new Date(),
+        preview: { name: data.name }
+      });
+      await setDoc(doc(db, 'users', currentUser.uid, 'characters', id), { isPublic:true, publicId:id }, { merge:true });
+      alert('公開しました: ' + data.name);
+      renderSavedListCloud();
+    }));
+    container.querySelectorAll('.deleteCloudBtn').forEach(b=>b.addEventListener('click', async (ev)=>{
+      const id = ev.target.dataset.id;
+      if(!confirm('本当にクラウド上のデータを削除しますか？')) return;
+      await deleteDoc(doc(db, 'users', currentUser.uid, 'characters', id));
+      try{ await deleteDoc(doc(db, 'publicCharacters', id)); }catch(e){}
+      alert('クラウドデータを削除しました');
+      renderSavedListCloud();
+    }));
+  }catch(e){ console.error(e); container.textContent = '一覧取得に失敗しました'; }
+}
+
+/* 公開一覧を取得して表示 */
+async function fetchPublicList(){
+  if(!db) return alert('Firebase 未設定。');
+  try{
+    const q = query(collection(db, 'publicCharacters'), orderBy('updatedAt', 'desc'));
+    const snaps = await getDocs(q);
+    const cont = document.getElementById('publicList');
+    if(!cont) return;
+    if(snaps.empty){ cont.textContent = '公開キャラはありません'; return; }
+    let html = '<ul>';
+    snaps.forEach(s=> {
+      const d=s.data();
+      html += `<li>${escapeHtml(d.name)} — <button class="loadPublic" data-id="${s.id}">表示</button></li>`;
+    });
+    html += '</ul>';
+    cont.innerHTML = html;
+    cont.querySelectorAll('.loadPublic').forEach(b=>b.addEventListener('click', async (ev)=>{
+      const id = ev.target.dataset.id;
+      const pubSnap = await getDoc(doc(db, 'publicCharacters', id));
+      if(!pubSnap.exists()) return alert('公開データが見つかりません');
+      const pub = pubSnap.data();
+      const owner = pub.ownerId;
+      if(!owner) return alert('公開情報が不完全です');
+      const fullSnap = await getDoc(doc(db, 'users', owner, 'characters', id));
+      if(!fullSnap.exists()) return alert('元データが見つかりません（オーナーが削除した可能性）');
+      applyJsonToUI(fullSnap.data().data);
+      alert('公開キャラを読み込みました（表示専用）');
+    }));
+  }catch(e){ alert('公開一覧取得に失敗: '+e.message); console.error(e); }
+}
+
+/* ======= イベント結線（UI） ======= */
 document.getElementById('rollAll').addEventListener('click', ()=>{ rollAll(); updateOut(); });
 document.getElementById('clearAll').addEventListener('click', ()=>{ clearAll(); updateOut(); });
 document.getElementById('derive').addEventListener('click', ()=>{ derive(); recalcAllSkills(); updateOut(); });
@@ -922,6 +1202,17 @@ document.getElementById('viewBtn').addEventListener('click', ()=>{ openViewPage(
 
 document.getElementById('EDU').addEventListener('input', ()=>{ recalcAllSkills(); });
 ['STR','CON','POW','DEX','APP','SIZ','INT'].forEach(id=>{ document.getElementById(id).addEventListener('input', ()=>{ recalcAllSkills(); }); });
+
+document.getElementById('btnSignUp').addEventListener('click', signUpEmail);
+document.getElementById('btnSignIn').addEventListener('click', signInEmail);
+document.getElementById('btnLogout').addEventListener('click', doSignOut);
+document.getElementById('btnReset').addEventListener('click', resetPassword);
+document.getElementById('saveCloudBtn').addEventListener('click', saveToCloud);
+document.getElementById('publishCloudBtn').addEventListener('click', publishToCloud);
+document.getElementById('cloudListBtn').addEventListener('click', ()=>{ renderSavedListCloud(); fetchPublicList(); alert('クラウド一覧を取得しました（下部）。'); });
+
+document.getElementById('addSkill').addEventListener('click', ()=>{ addSkillForCategory(Object.keys(DEFAULT_CATEGORIES)[0]); });
+document.getElementById('recalcSkills').addEventListener('click', recalcAllSkills);
 
 /* 初期化 */
 resetSkills();
