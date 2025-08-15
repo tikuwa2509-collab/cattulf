@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CatTulf — Edit (メモ欄 x8 追加)</title>
+  <style>
+    :root{--bg:#0b0c10;--card:#16171d;--muted:#8a8f98;--fg:#e7e9ee;--acc:#6aa1ff;--danger:#ff6b6b}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans JP",sans-serif;background:var(--bg);color:var(--fg)}
+    .wrap{max-width:1200px;margin:0 auto;padding:28px}
+    h1{font-size:20px;margin:0 0 12px}
+    .grid{display:grid;gap:12px}
+    .card{background:var(--card);border:1px solid #20222b;border-radius:12px;padding:12px}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea,button{font:inherit}
+    input,select,textarea{padding:8px;border-radius:8px;border:1px solid #2b2e39;background:#0f1117;color:var(--fg)}
+    textarea{min-height:64px}
+    input[type="number"]{width:86px}
+    .row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    button{appearance:none;border:0;border-radius:8px;padding:8px 12px;background:var(--acc);color:#081024;font-weight:700;cursor:pointer}
+    button.ghost{background:#2b2e39;color:var(--fg)}
+    .skills-table{width:100%;border-collapse:collapse;margin-top:8px}
+    .skills-table th,.skills-table td{padding:8px;border-bottom:1px solid #242632;text-align:left;font-size:13px;vertical-align:middle}
+    .skills-table th{background:#0c0d11;color:var(--muted);font-weight:600}
+    .small{font-size:12px;color:var(--muted)}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0f1117;border:1px solid #2b2e39;border-radius:8px;padding:12px;max-height:320px;overflow:auto}
+    .row-actions{display:flex;gap:8px;align-items:center}
+    .num{width:86px}
+    .btn-small{padding:6px 8px;border-radius:6px}
+    .right{text-align:right}
+    .alloc-status{font-weight:700}
+    .alloc-over{color:var(--danger)}
+    input.over{outline:2px solid var(--danger)}
+    .small-grey{font-size:12px;color:#9aa0a8}
+    .file-input{display:none}
+    .id-pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1117;border:1px solid #2b2e39;color:#9aa0a8}
+    .cat-toggle{cursor:pointer;padding:6px 8px;border-radius:6px;background:#27282f;border:1px solid #333;color:var(--muted);font-size:13px}
+    .lang-input{width:120px;margin-left:8px;padding:6px;border-radius:6px;border:1px solid #2b2e39;background:#0f1117;color:var(--fg)}
+    .skill-name-wrap{display:flex;align-items:center;gap:8px}
+    .cat-header{background:#141518;color:var(--muted);font-weight:700;padding:6px 8px;border-radius:6px;margin-top:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+    .help{font-size:12px;color:#9aa0a8;margin-top:6px}
+    .derived-row{display:flex;gap:8px;align-items:center}
+    .derived-row input{width:140px}
+    #DB{width:100px}
+    .basic-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .basic-full{grid-column:1/-1}
+    .readonly{background:#23252a;border:1px solid #31343a;color:#bfc6cf;cursor:not-allowed}
+    .readonly::placeholder{color:#8f959a}
+    .skill-total.readonly{background:#23252a;border:1px solid #31343a;color:#bfc6cf}
+    /* memo セクション */
+    .memo-card{margin-top:8px;border-radius:10px;padding:10px;background:#121217;border:1px solid #222429}
+    .memo-section{border:1px solid #222; border-radius:8px;padding:8px;margin-bottom:8px;background:#0f1117}
+    .memo-section .ms-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .ms-title{font-weight:700}
+    .ms-controls{display:flex;gap:8px;align-items:center}
+    .ms-content{margin-top:8px}
+    .ms-collapsed .ms-content{display:none}
+    .toggle-visibility{appearance:none;border:1px solid #2b2e39;background:#1b1d21;color:var(--muted);padding:6px;border-radius:6px;cursor:pointer}
+    .collapse-btn{appearance:none;border:1px solid #2b2e39;background:#1b1d21;color:var(--muted);padding:6px;border-radius:6px;cursor:pointer}
+    .field-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
+    .field-row label{min-width:140px;color:var(--muted);}
+    .field-row textarea{flex:1;min-height:52px}
+    .field-row input[type="text"]{flex:1}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>CatTulf</h1>
+    <p class="small">それぞれのメモ欄は折りたたみ・ビュー表示のオンオフが可能。保存・読み込み・JSON 出力に反映されます。</p>
+
+    <div class="grid">
+      <!-- 基本情報 -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <label>キャラクター名（表示名）</label>
+            <input id="name" value="新たな探索者" />
+          </div>
+          <div class="row-actions">
+            <span id="charIdView" class="id-pill">ID: 未保存</span>
+            <button id="saveBtn">保存</button>
+            <button class="ghost" id="loadBtn">読み込み</button>
+            <button id="viewBtn" class="btn-small">表示</button>
+            <button id="exportBtn" class="btn-small">エクスポート(.json)</button>
+            <label class="btn-small ghost" style="cursor:pointer;padding:6px 8px;border-radius:6px;background:#2b2e39;color:var(--fg)">
+              インポート
+              <input type="file" id="importFile" class="file-input" accept=".json">
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="basic-grid">
+          <div>
+            <label>普段使用する名前</label>
+            <input id="commonName" value="" />
+          </div>
+          <div>
+            <label>特別な名前</label>
+            <input id="specialName" value="" />
+          </div>
+          <div>
+            <label>秘密の名前</label>
+            <input id="secretName" value="" />
+          </div>
+
+          <div>
+            <label>血統</label>
+            <input id="bloodline" value="" />
+          </div>
+          <div>
+            <label>性別</label>
+            <input id="gender" value="" />
+          </div>
+          <div>
+            <label>年齢</label>
+            <input id="age" value="" />
+          </div>
+
+          <div>
+            <label>生まれた場所</label>
+            <input id="birthplace" value="" />
+          </div>
+          <div>
+            <label>縄張り</label>
+            <input id="territory" value="" />
+          </div>
+          <div>
+            <label>ストレス障害</label>
+            <input id="stressDisorder" value="" />
+          </div>
+
+          <div class="basic-full">
+            <label>備考</label>
+            <textarea id="basicNote" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 能力値 -->
+      <div class="card">
+        <div class="row3">
+          <div><label>STR</label><input id="STR" type="number" value="0" /></div>
+          <div><label>CON</label><input id="CON" type="number" value="0" /></div>
+          <div><label>POW</label><input id="POW" type="number" value="0" /></div>
+          <div><label>DEX</label><input id="DEX" type="number" value="0" /></div>
+          <div><label>APP</label><input id="APP" type="number" value="0" /></div>
+          <div><label>SIZ</label><input id="SIZ" type="number" value="0" /></div>
+          <div><label>INT</label><input id="INT" type="number" value="0" /></div>
+          <div><label>EDU</label><input id="EDU" type="number" value="0" /></div>
+          <div style="display:flex;align-items:end;gap:8px">
+            <button id="rollAll">能力値ロール</button>
+            <button class="ghost" id="clearAll">クリア</button>
+          </div>
+        </div>
+        <p class="small" style="margin-top:8px">猫用ロール: STR=1d3, CON=2d6(最低4), SIZ=1, INT=2d6+6, DEX=2d6+14, EDU=3d6+3, APP=3d6, POW=2d6+6。HPは (CON+SIZ)/2 を切り上げで計算します。</p>
+      </div>
+
+      <!-- 二次値 -->
+      <div class="card">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px">
+            <label>HP / MP / SEN（現在は編集可能）</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="HP" type="number" value="0" />
+              <input id="MP" type="number" value="0" />
+              <input id="SEN" type="number" value="0" />
+              <input id="SENmax" type="number" value="0" readonly class="readonly" />
+            </div>
+            <div class="small-grey" style="margin-top:6px" id="SENFrac">現在SEN / 最大SEN = 0 / 0</div>
+          </div>
+
+          <div style="flex:1;min-width:320px">
+            <label>アイデア / 幸運 / 知識 / ダメージボーナス</label>
+            <div class="derived-row">
+              <input id="IDEA" readonly class="readonly" placeholder="アイデア (INT×5)" />
+              <input id="LUCK" readonly class="readonly" placeholder="幸運 (POW×5)" />
+              <input id="KNOW" readonly class="readonly" placeholder="知識 (EDU×5)" />
+              <input id="DB" readonly class="readonly" placeholder="ダメージボーナス" />
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:8px"><button class="ghost" id="derive">二次値を自動計算</button></div>
+        <p class="small" style="margin-top:8px">IDEA=INT×5、LUCK=POW×5、KNOW=EDU×5。DB（STR+SIZ）に基づいてダメージボーナスを算出します。SEN最大は <code>99 - クトゥルフ神話</code> で固定されます。</p>
+      </div>
+
+      <!-- カテゴリ表示トグル -->
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <strong>カテゴリ表示</strong>
+          <div id="categoryToggles" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          <div class="help">カテゴリを非表示にして編集画面を整理できます。</div>
+        </div>
+      </div>
+
+      <!-- 技能 -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <strong>技能（カテゴリ別）</strong>
+            <div class="small">初期値は数値または式（式中は <code>{STAT}</code> を使用）。「人語」「ほかの言語」は言語名を入力できます。</div>
+          </div>
+          <div class="row-actions">
+            <div class="alloc-status" id="allocStatus">割り振り: 0 / 0</div>
+            <button id="resetSkills" class="btn-small ghost">デフォルトに戻す</button>
+          </div>
+        </div>
+
+        <table class="skills-table" id="skillsTable">
+          <thead>
+            <tr>
+              <th style="width:240px">技能名</th>
+              <th style="width:160px">初期値</th>
+              <th style="width:120px">割り振り</th>
+              <th style="width:100px">成長</th>
+              <th style="width:120px">その他</th>
+              <th style="width:100px">合計</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <div class="help">合計 = 初期値（式は能力参照で自動算出）＋割り振り＋成長＋その他。割り振り総数は <strong>EDU × 20</strong>。超過すると赤で警告されます。</div>
+      </div>
+
+      <!-- --- ここからメモ欄（8つ） --- -->
+      <div class="card memo-card" id="memoSectionsCard">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>詳細メモ（8セクション）</strong><div class="small">各セクションは折りたたみとビュー表示のオン/オフが可能です。</div></div>
+          <div class="small-grey">編集中の内容は保存しておくと次回読み込み可能です。</div>
+        </div>
+
+        <div id="memoSectionsContainer" style="margin-top:12px"></div>
+      </div>
+      <!-- --- ここまでメモ欄 --- -->
+
+      <!-- 任意メモ（従来の一括メモ） -->
+      <div class="card">
+        <label>任意メモ（従来のメモ欄）</label>
+        <textarea id="memo" rows="4"></textarea>
+
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button id="gen">Cocofolia JSON 生成</button>
+          <button class="ghost" id="copy">コピー</button>
+          <button class="ghost" id="download">.json ダウンロード</button>
+        </div>
+        <p class="small" style="margin-top:8px">出力には全技能と、各技能のコマンド（<code>CCB&lt;=合計 【技能名】</code>）が含まれます。</p>
+        <pre id="out">{}</pre>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ======= ユーティリティ ======= */
+function rInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+function rollNdM(n,m){let t=0;for(let i=0;i<n;i++) t+=rInt(1,m);return t;}
+function setVal(id,v){document.getElementById(id).value = v;}
+function getNum(id){return Number(document.getElementById(id).value||0);}
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ======= DB（ダメージボーナス）計算 ======= */
+function computeDBLabel(sum){
+  if(sum <= 12) return '-1d6';
+  if(sum <= 16) return '-1d4';
+  if(sum <= 24) return '0';
+  if(sum <= 32) return '+1d4';
+  if(sum <= 40) return '+1d6';
+  if(sum <= 56) return '+2d6';
+  if(sum <= 72) return '+3d6';
+  if(sum <= 88) return '+4d6';
+  if(sum <= 104) return '+5d6';
+  if(sum <= 120) return '+6d6';
+  if(sum <= 136) return '+7d6';
+  if(sum <= 152) return '+8d6';
+  if(sum <= 168) return '+9d6';
+  if(sum <= 184) return '+10d6';
+  let over = sum - 184;
+  let extra = Math.floor(over / 16) + 10;
+  return '+' + extra + 'd6';
+}
+function dbExprForRoll(sum){ const label = computeDBLabel(sum); if(label === '0') return ''; return label; }
+
+/* ======= 猫用ロール / 二次値（HPは切り上げ） ======= */
+function rollAll(){
+  setVal('STR', rollNdM(1,3));
+  setVal('CON', Math.max(rollNdM(2,6),4));
+  setVal('SIZ', 1);
+  setVal('INT', rollNdM(2,6)+6);
+  setVal('DEX', rollNdM(2,6)+14);
+  setVal('EDU', rollNdM(3,6)+3);
+  setVal('APP', rollNdM(3,6));
+  setVal('POW', rollNdM(2,6)+6);
+  derive();
+  recalcAllSkills();
+}
+function clearAll(){
+  ['STR','CON','POW','DEX','APP','SIZ','INT','EDU','HP','MP','SEN','IDEA','LUCK','KNOW','DB','SENmax'].forEach(id=>setVal(id,0));
+  resetSkills();
+  initMemoState(true);
+  updateOut();
+}
+function derive(){
+  const CON = getNum('CON'), SIZ = getNum('SIZ'), POW = getNum('POW');
+  const hp = Math.ceil((CON + SIZ) / 2); // 切り上げ
+  setVal('HP', hp);
+  setVal('MP', POW);
+  // SEN current is editable by user; overwrite only if empty/0
+  const autoSEN = POW * 5;
+  const curSEN = document.getElementById('SEN').value;
+  if(!curSEN || curSEN === '0') { setVal('SEN', autoSEN); }
+  // IDEA / LUCK / KNOW (read-only)
+  const INT = getNum('INT'), EDU = getNum('EDU');
+  setVal('IDEA', INT * 5);
+  setVal('LUCK', POW * 5);
+  setVal('KNOW', EDU * 5);
+  // DB
+  const STR = getNum('STR');
+  setVal('DB', computeDBLabel(STR + SIZ));
+  computeAndDisplayMaxSEN();
+}
+
+/* ======= 技能定義（省略：前のまま） ======= */
+const DEFAULT_CATEGORIES = {
+  "戦闘技能": [
+    {name:"回避", initialRaw:"{DEX}*4"},
+    {name:"噛みつき", initialRaw:"30"},
+    {name:"組み付き", initialRaw:"25"},
+    {name:"引き裂き", initialRaw:"80"},
+    {name:"引っかき", initialRaw:"40"},
+    {name:"投擲", initialRaw:"10"}
+  ],
+  "探索技能": [
+    {name:"治癒", initialRaw:"10"},
+    {name:"隠れる", initialRaw:"25"},
+    {name:"聞き耳", initialRaw:"40"},
+    {name:"忍び歩き", initialRaw:"50"},
+    {name:"嗅ぎ取り", initialRaw:"50"},
+    {name:"追跡", initialRaw:"20"},
+    {name:"登攀", initialRaw:"50"},
+    {name:"かわいらしさ", initialRaw:"{APP}*3"},
+    {name:"危機感知", initialRaw:"10"},
+    {name:"自然", initialRaw:"{EDU}*2"},
+    {name:"目星", initialRaw:"25"}
+  ],
+  "行動技能": [
+    {name:"水泳", initialRaw:"10"},
+    {name:"睡眠", initialRaw:"50"},
+    {name:"跳躍", initialRaw:"50"},
+    {name:"ナビゲート", initialRaw:"25"},
+    {name:"敏捷", initialRaw:"{DEX}*2"},
+    {name:"身づくろい", initialRaw:"50"},
+    {name:"ヒプノーシス", initialRaw:"10"},
+    {name:"夢見", initialRaw:"25"}
+  ],
+  "交渉技能": [
+    {name:"ヨウル", initialRaw:"50"},
+    {name:"ヒス", initialRaw:"50"},
+    {name:"地位", initialRaw:"1"},
+    {name:"人語", initialRaw:"{INT}*2", langInput:true},
+    {name:"ほかの言語", initialRaw:"1", langInput:true}
+  ],
+  "知識技能": [
+    {name:"ストリート知識", initialRaw:"1"},
+    {name:"オカルト", initialRaw:"5"},
+    {name:"洞察", initialRaw:"1"},
+    {name:"人間知識", initialRaw:"{EDU}*1"},
+    {name:"夢の知識", initialRaw:"10"},
+    {name:"クトゥルフ神話", initialRaw:"0"}
+  ]
+};
+
+/* ======= SKILLS 管理（省略／前のまま） ======= */
+let SKILLS = [];
+const skillsTbody = document.querySelector('#skillsTable tbody');
+const allocStatusEl = document.getElementById('allocStatus');
+const categoryTogglesEl = document.getElementById('categoryToggles');
+
+function buildCategoryToggles(){
+  categoryTogglesEl.innerHTML = '';
+  Object.keys(DEFAULT_CATEGORIES).forEach(cat=>{
+    const btn = document.createElement('button');
+    btn.className = 'cat-toggle';
+    btn.dataset.cat = cat;
+    btn.textContent = cat + '（表示）';
+    btn.dataset.visible = '1';
+    btn.addEventListener('click', ()=>{
+      const visible = btn.dataset.visible === '1';
+      btn.dataset.visible = visible ? '0' : '1';
+      btn.textContent = cat + (visible ? '（非表示）' : '（表示）');
+      toggleCategoryVisibility(cat, !visible);
+    });
+    categoryTogglesEl.appendChild(btn);
+  });
+}
+function toggleCategoryVisibility(cat, show){
+  document.querySelectorAll(`#skillsTable tbody tr[data-category="${cssEscape(cat)}"]`).forEach(tr=>{ tr.style.display = show ? '' : 'none'; });
+  const headerTr = document.querySelector(`#skillsTable tbody tr[data-cat-header="${cssEscape(cat)}"]`);
+  if(headerTr) headerTr.style.display = show ? '' : 'none';
+}
+function cssEscape(s){ return String(s).replace(/"/g,'&quot;').replace(/'/g,"\\'").replace(/\]/g,'\\]').replace(/\[/g,'\\['); }
+
+function computeInitialValue(initialRaw, paramsMap){
+  if(typeof initialRaw !== 'string') return Number(initialRaw) || 0;
+  const trimmed = initialRaw.trim();
+  if(trimmed === '') return 0;
+  if(/^[0-9]+$/.test(trimmed)) return Number(trimmed);
+  let replaced = trimmed.replace(/\{([A-Za-z0-9_]+)\}/g, (_, key)=>{ const v = paramsMap[key]; return (v !== undefined) ? String(Number(v)) : '0'; });
+  if(!/^[0-9+\-*/().\s]+$/.test(replaced)) return NaN;
+  try{ return Number(Function('"use strict"; return (' + replaced + ')')()); }catch(e){return NaN;}
+}
+
+/* SKILLS のレンダリング・イベントは以前と同様（省略せず実装） */
+function renderSkills(){
+  skillsTbody.innerHTML = '';
+  const paramsMap = { STR:getNum('STR'), CON:getNum('CON'), POW:getNum('POW'), DEX:getNum('DEX'), APP:getNum('APP'), SIZ:getNum('SIZ'), INT:getNum('INT'), EDU:getNum('EDU') };
+
+  Object.keys(DEFAULT_CATEGORIES).forEach(cat=>{
+    const header = document.createElement('tr');
+    header.dataset.catHeader = cat;
+    header.innerHTML = `<td colspan="7" class="cat-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <strong>${escapeHtml(cat)}</strong>
+        <span class="small" style="margin-left:8px">（カテゴリ）</span>
+      </div>
+      <div>
+        <button class="btn-small add-cat-skill" data-cat="${escapeHtml(cat)}">＋このカテゴリに追加</button>
+      </div>
+      </td>`;
+    skillsTbody.appendChild(header);
+
+    SKILLS.filter(s => s.category === cat).forEach((sk, idx)=>{
+      let initVal = computeInitialValue(sk.initialRaw, paramsMap);
+      if(isNaN(initVal)) initVal = 0;
+
+      const tr = document.createElement('tr');
+      tr.dataset.category = cat;
+      tr.dataset.idx = SKILLS.indexOf(sk);
+
+      const langHtml = sk.langInput ? `<input class="lang-input" value="${escapeHtml(sk.langName||'')}" />` : '';
+      const nameHtml = `<div class="skill-name-wrap"><input class="skill-name" value="${escapeHtml(sk.name)}" /> ${langHtml}</div>`;
+      const deleteHtml = sk.fixed ? '' : `<button class="btn-small ghost del-skill">削除</button>`;
+
+      tr.innerHTML = `
+        <td>${nameHtml}</td>
+        <td><input class="skill-initial" data-raw="${escapeHtml(sk.initialRaw)}" value="${initVal}" /></td>
+        <td><input class="skill-alloc num" type="number" min="0" value="${sk.alloc||0}" /></td>
+        <td><input class="skill-growth num" type="number" min="0" value="${sk.growth||0}" /></td>
+        <td><input class="skill-other num" type="number" value="${sk.other||0}" /></td>
+        <td class="right"><input class="skill-total num readonly" type="number" readonly value="${sk.total||0}" /></td>
+        <td class="right">${deleteHtml}</td>
+      `;
+      skillsTbody.appendChild(tr);
+    });
+  });
+
+  document.querySelectorAll('.add-cat-skill').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ const cat = e.currentTarget.dataset.cat || Object.keys(DEFAULT_CATEGORIES)[0]; addSkillForCategory(cat); });
+  });
+
+  attachSkillEvents();
+  recalcAllSkills();
+  document.querySelectorAll('#categoryToggles button').forEach(btn=>{ const cat = btn.dataset.cat; const show = btn.dataset.visible === '1'; toggleCategoryVisibility(cat, show); });
+}
+
+function attachSkillEvents(){
+  document.querySelectorAll('#skillsTable tbody tr').forEach(tr=>{
+    if(tr.dataset.catHeader) return;
+    const idx = Number(tr.dataset.idx);
+    const nameInput = tr.querySelector('.skill-name');
+    const initialInput = tr.querySelector('.skill-initial');
+    const allocInput = tr.querySelector('.skill-alloc');
+    const growthInput = tr.querySelector('.skill-growth');
+    const otherInput = tr.querySelector('.skill-other');
+    const langInput = tr.querySelector('.lang-input');
+    const delBtn = tr.querySelector('.del-skill');
+
+    if(nameInput) nameInput.addEventListener('input', ()=>{ SKILLS[idx].name = nameInput.value; updateOut(); });
+    if(initialInput) initialInput.addEventListener('input', (e)=>{ SKILLS[idx].initialRaw = e.target.value.trim(); recalcAllSkills(); });
+    if(allocInput) allocInput.addEventListener('input', ()=>{ recalcAllSkills(); });
+    if(growthInput) growthInput.addEventListener('input', ()=>{ recalcAllSkills(); });
+    if(otherInput) otherInput.addEventListener('input', ()=>{ recalcAllSkills(); });
+    if(langInput) langInput.addEventListener('input', ()=>{ SKILLS[idx].langName = langInput.value.trim(); updateOut(); });
+    if(delBtn){
+      delBtn.addEventListener('click', ()=>{ if(SKILLS[idx] && !SKILLS[idx].fixed){ SKILLS.splice(idx,1); renderSkills(); } else { alert('この技能は削除できません。'); } });
+    }
+  });
+}
+
+function calcSkillRow(tr){
+  if(tr.dataset.catHeader) return;
+  const idx = Number(tr.dataset.idx);
+  const nameInput = tr.querySelector('.skill-name');
+  const initialInput = tr.querySelector('.skill-initial');
+  const allocInput = tr.querySelector('.skill-alloc');
+  const growthInput = tr.querySelector('.skill-growth');
+  const otherInput = tr.querySelector('.skill-other');
+  const totalInput = tr.querySelector('.skill-total');
+  const langInput = tr.querySelector('.lang-input');
+
+  const raw = SKILLS[idx] && SKILLS[idx].initialRaw ? SKILLS[idx].initialRaw : (initialInput.dataset.raw || initialInput.value || '0');
+  const paramsMap = { STR: getNum('STR'), CON: getNum('CON'), POW: getNum('POW'), DEX: getNum('DEX'), APP: getNum('APP'), SIZ: getNum('SIZ'), INT: getNum('INT'), EDU: getNum('EDU') };
+  let initVal = computeInitialValue(raw, paramsMap);
+  if(isNaN(initVal)) initVal = 0;
+  initialInput.value = initVal;
+
+  const alloc = Number(allocInput.value||0);
+  const growth = Number(growthInput.value||0);
+  const other = Number(otherInput.value||0);
+  const total = Math.max(0, Math.floor(initVal + alloc + growth + other));
+  totalInput.value = total;
+
+  SKILLS[idx] = Object.assign(SKILLS[idx] || {}, {
+    name: nameInput ? nameInput.value : (SKILLS[idx] && SKILLS[idx].name) || '',
+    initialRaw: raw,
+    initialValue: initVal,
+    alloc, growth, other, total,
+    langName: langInput ? (langInput.value.trim() || '') : (SKILLS[idx] && SKILLS[idx].langName || ''),
+    category: SKILLS[idx] && SKILLS[idx].category ? SKILLS[idx].category : SKILLS[idx] && SKILLS[idx].category || Object.keys(DEFAULT_CATEGORIES)[0],
+    fixed: SKILLS[idx] && !!SKILLS[idx].fixed
+  });
+}
+
+function recalcAllSkills(){
+  document.querySelectorAll('#skillsTable tbody tr').forEach(tr=>calcSkillRow(tr));
+  updateAllocStatus();
+  computeAndDisplayMaxSEN();
+  derive();
+  updateOut();
+}
+
+function addSkillForCategory(category){ addSkill('新技能', '0', category, false, false); renderSkills(); }
+function addSkill(name='新技能', initialRaw='0', category=Object.keys(DEFAULT_CATEGORIES)[0], langInput=false, fixed=false){ SKILLS.push({name, initialRaw, alloc:0, growth:0, other:0, total:0, category, langInput, langName:'', fixed: !!fixed}); renderSkills(); }
+function resetSkills(){
+  SKILLS = [];
+  Object.keys(DEFAULT_CATEGORIES).forEach(cat=>{
+    DEFAULT_CATEGORIES[cat].forEach(s=>{
+      SKILLS.push({ name: s.name, initialRaw: s.initialRaw, alloc:0, growth:0, other:0, total:0, category: cat, langInput: !!s.langInput, langName: '', fixed: true });
+    });
+  });
+  buildCategoryToggles();
+  renderSkills();
+}
+
+/* helper to find current クトゥルフ神話 合計 */
+function currentCthulhuValue(){ const s = SKILLS.find(x => (x.name||'').trim() === 'クトゥルフ神話'); if(!s) return 0; return Number(s.total || 0); }
+
+/* compute and display max SEN (and clamp current SEN if needed) */
+function computeAndDisplayMaxSEN(){
+  const ct = currentCthulhuValue();
+  const maxSEN = Math.max(0, 99 - ct);
+  setVal('SENmax', maxSEN);
+  // clamp current SEN automatically if it exceeds max
+  let cur = getNum('SEN');
+  if(cur > maxSEN){ cur = maxSEN; setVal('SEN', cur); }
+  document.getElementById('SENFrac').textContent = `現在SEN / 最大SEN = ${cur} / ${maxSEN}`;
+}
+
+/* ======= 割り振り(EDU×20) ======= */
+function totalAllocPoints(){ return getNum('EDU') * 20; }
+function usedAllocPoints(){ return SKILLS.reduce((acc,s)=>acc + (Number(s.alloc||0)||0), 0); }
+function updateAllocStatus(){
+  const used = usedAllocPoints();
+  const total = totalAllocPoints();
+  allocStatusEl.textContent = `割り振り: ${used} / ${total}`;
+  if(used > total) allocStatusEl.classList.add('alloc-over'); else allocStatusEl.classList.remove('alloc-over');
+  document.querySelectorAll('.skill-alloc').forEach(inp=> inp.classList.remove('over'));
+  if(used > total) document.querySelectorAll('.skill-alloc').forEach(inp=> inp.classList.add('over'));
+}
+
+/* ======= メモ欄（定義 & 状態管理） ======= */
+const MEMO_DEFS = [
+  { id:'explorerData', title:'猫探索者のデータ', fields:[
+      {k:'explorerName', label:'探索者名'},
+      {k:'address', label:'住所'},
+      {k:'description', label:'描写'},
+      {k:'familyFriends', label:'家族＆友人'},
+      {k:'insanity', label:'狂気の症状'},
+      {k:'injuries', label:'負傷'},
+      {k:'scars', label:'傷跡など'}
+    ] },
+  { id:'nobleHistory', title:'高貴なる猫族の試みの歴史', fields:[ {k:'history', label:'歴史'} ] },
+  { id:'assetsAndOwed', title:'資産と恩（資産と音）', fields:[
+      {k:'mainOwner', label:'主な缶切り（飼い主）'},
+      {k:'territory', label:'個人の縄張り'},
+      {k:'favorsReceived', label:'受けた恩'},
+      {k:'favorsGiven', label:'与えた恩'}
+    ] },
+  { id:'equipment', title:'冒険の装備とその他の所持品', fields:[ {k:'equipment', label:'装備と所持品'} ] },
+  { id:'grimoires', title:'調べてみたクトゥルフ神話の魔導書', fields:[ {k:'grimoires', label:'魔導書'} ] },
+  { id:'friendsEnemies', title:'猫族の敵と味方', fields:[
+      {k:'enemies', label:'敵'},
+      {k:'allies', label:'味方'}
+    ] },
+  { id:'artifactsSpells', title:'アーティファクト / 学んだ呪文', fields:[
+      {k:'artifacts', label:'アーティファクト'},
+      {k:'spells', label:'呪文'}
+    ] },
+  { id:'acceptableOwners', title:'受容可能な缶切り', fields:[ {k:'owners', label:'受容可能な缶切り'} ] }
+];
+
+let MEMO_STATE = []; // [{id,title,visible,collapsed,fields:{k:value}}]
+
+function initMemoState(forceReset=false){
+  if(!forceReset && MEMO_STATE.length>0) return;
+  MEMO_STATE = MEMO_DEFS.map(def=>{
+    const fieldsObj = {};
+    def.fields.forEach(f=> fieldsObj[f.k] = '');
+    return { id:def.id, title:def.title, visible:true, collapsed:false, fields:fieldsObj };
+  });
+  renderMemoSections();
+}
+
+function renderMemoSections(){
+  const container = document.getElementById('memoSectionsContainer');
+  container.innerHTML = '';
+  MEMO_STATE.forEach((sec, sIdx)=>{
+    const secEl = document.createElement('div');
+    secEl.className = 'memo-section' + (sec.collapsed ? ' ms-collapsed' : '');
+    secEl.dataset.id = sec.id;
+    let inner = '';
+    inner += `<div class="ms-header"><div><span class="ms-title">${escapeHtml(sec.title)}</span></div>`;
+    inner += `<div class="ms-controls">
+      <button class="collapse-btn" data-action="toggleCollapse" data-id="${escapeHtml(sec.id)}">${sec.collapsed ? '表示' : '折りたたむ'}</button>
+      <label style="display:inline-flex;align-items:center;gap:6px">
+        <input type="checkbox" class="visible-checkbox" data-id="${escapeHtml(sec.id)}" ${sec.visible ? 'checked' : ''} />
+        表示
+      </label>
+    </div></div>`;
+    inner += `<div class="ms-content">`;
+    sec.fields && Object.keys(sec.fields).forEach(k=>{
+      const def = MEMO_DEFS.find(d=>d.id===sec.id);
+      const fld = def.fields.find(f=>f.k===k);
+      inner += `<div class="field-row"><label>${escapeHtml(fld.label)}</label><textarea data-sec="${escapeHtml(sec.id)}" data-key="${escapeHtml(k)}">${escapeHtml(sec.fields[k]||'')}</textarea></div>`;
+    });
+    inner += `</div>`;
+    secEl.innerHTML = inner;
+    container.appendChild(secEl);
+  });
+
+  // attach events
+  container.querySelectorAll('.collapse-btn').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      const id = btn.dataset.id;
+      const sec = MEMO_STATE.find(s=>s.id===id);
+      if(!sec) return;
+      sec.collapsed = !sec.collapsed;
+      renderMemoSections();
+      updateOut();
+    });
+  });
+  container.querySelectorAll('.visible-checkbox').forEach(cb=>{
+    cb.addEventListener('change', (e)=>{
+      const id = cb.dataset.id;
+      const sec = MEMO_STATE.find(s=>s.id===id);
+      if(!sec) return;
+      sec.visible = !!cb.checked;
+      updateOut();
+    });
+  });
+  container.querySelectorAll('textarea[data-sec]').forEach(ta=>{
+    ta.addEventListener('input', (e)=>{
+      const id = ta.dataset.sec;
+      const key = ta.dataset.key;
+      const sec = MEMO_STATE.find(s=>s.id===id);
+      if(!sec) return;
+      sec.fields[key] = ta.value;
+      updateOut();
+    });
+  });
+}
+
+/* ======= Cocofolia コマンド / JSON 出力 ======= */
+function buildCommands(){
+  const lines = [];
+  lines.push(`1d100<={SEN} 【正気度ロール】`);
+  const idea = getNum('IDEA'), luck = getNum('LUCK'), know = getNum('KNOW');
+  lines.push(`CCB<=${idea} 【アイデア】`);
+  lines.push(`CCB<=${luck} 【幸運】`);
+  lines.push(`CCB<=${know} 【知識】`);
+  SKILLS.forEach(s=>{
+    const safeName = (s.name||'').replace(/\n/g,' ').trim();
+    const label = s.langInput && s.langName ? `${safeName}（${s.langName}）` : safeName;
+    const val = Number(s.total||0);
+    lines.push(`CCB<=${val} 【${label}】`);
+  });
+  const sum = getNum('STR') + getNum('SIZ');
+  const dbExpr = dbExprForRoll(sum);
+  lines.push(`1d4 【ダメージ判定】`);
+  lines.push(`2d3${dbExpr} 【ダメージ判定】`);
+  lines.push(`1d3${dbExpr} 【ダメージ判定】`);
+  ['STR','CON','POW','DEX','APP','SIZ','INT','EDU'].forEach(k=>{
+    lines.push(`CCB<={${k}}*5 【${k} × 5】`);
+  });
+  return lines.join('\n');
+}
+
+function buildJson(){
+  const name = document.getElementById('name').value || '新たな探索者';
+  const basicInfo = {
+    commonName: document.getElementById('commonName').value || '',
+    specialName: document.getElementById('specialName').value || '',
+    secretName: document.getElementById('secretName').value || '',
+    bloodline: document.getElementById('bloodline').value || '',
+    gender: document.getElementById('gender').value || '',
+    age: document.getElementById('age').value || '',
+    birthplace: document.getElementById('birthplace').value || '',
+    territory: document.getElementById('territory').value || '',
+    stressDisorder: document.getElementById('stressDisorder').value || '',
+    note: document.getElementById('basicNote').value || ''
+  };
+
+  const params = [
+    {label:'STR', value:String(getNum('STR'))},
+    {label:'CON', value:String(getNum('CON'))},
+    {label:'POW', value:String(getNum('POW'))},
+    {label:'DEX', value:String(getNum('DEX'))},
+    {label:'APP', value:String(getNum('APP'))},
+    {label:'SIZ', value:String(getNum('SIZ'))},
+    {label:'INT', value:String(getNum('INT'))},
+    {label:'EDU', value:String(getNum('EDU'))},
+    {label:'SEN', value:String(getNum('SEN'))}
+  ];
+  const status = [
+    {label:'HP', value:getNum('HP'), max:getNum('HP')},
+    {label:'MP', value:getNum('MP'), max:getNum('MP')},
+    {label:'SEN', value:getNum('SEN'), max:getNum('SEN')}
+  ];
+  const derived = {
+    IDEA: getNum('IDEA'),
+    LUCK: getNum('LUCK'),
+    KNOW: getNum('KNOW'),
+    DB: document.getElementById('DB').value || computeDBLabel(getNum('STR') + getNum('SIZ')),
+    SENmax: getNum('SENmax'),
+    cthulhuSkill: currentCthulhuValue()
+  };
+  const skillsJson = SKILLS.map(s=>({
+    name: s.name || '',
+    initialRaw: s.initialRaw || '',
+    initialValue: s.initialValue || 0,
+    alloc: Number(s.alloc||0),
+    growth: Number(s.growth||0),
+    other: Number(s.other||0),
+    total: Number(s.total||0),
+    category: s.category || '',
+    langInput: !!s.langInput,
+    langName: s.langName || '',
+    fixed: !!s.fixed
+  }));
+  // memo sections
+  const memoSectionsJson = MEMO_STATE.map(s=>({ id:s.id, title:s.title, visible:!!s.visible, fields: s.fields }));
+  const id = CURRENT_ID || null;
+  return {
+    kind:'character',
+    id,
+    data:{
+      name, initiative:0,
+      basicInfo,
+      externalUrl:'', iconUrl:'',
+      memo: document.getElementById('memo').value || '',
+      commands: buildCommands(),
+      status, params, skills: skillsJson,
+      derived, memoSections: memoSectionsJson
+    }
+  };
+}
+function pretty(){ return JSON.stringify(buildJson(), null, 2); }
+function updateOut(){ document.getElementById('out').textContent = pretty(); }
+
+/* ======= 保存等 ======= */
+const STORAGE_PREFIX = 'cattulf_v1_';
+let CURRENT_ID = null;
+function newId(){ return 'cat-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
+function storageKey(id){ return STORAGE_PREFIX + id; }
+function reflectIdPill(){ document.getElementById('charIdView').textContent = 'ID: ' + (CURRENT_ID || '未保存'); }
+
+function saveToLocal(manual=true){
+  try{
+    if(!CURRENT_ID) CURRENT_ID = newId();
+    const json = buildJson();
+    json.id = CURRENT_ID;
+    localStorage.setItem(storageKey(CURRENT_ID), JSON.stringify(json));
+    reflectIdPill();
+    if(manual) alert('保存しました（ID: '+CURRENT_ID+'）。');
+  }catch(e){ alert('保存に失敗しました: ' + e.message); }
+}
+function loadFromLocal(){
+  const id = prompt('読み込むIDを入力してください（画面上部に表示されます）');
+  if(!id) return;
+  const raw = localStorage.getItem(storageKey(id));
+  if(!raw){ alert('データが見つかりません。'); return; }
+  const obj = JSON.parse(raw);
+  CURRENT_ID = obj.id || id;
+  reflectIdPill();
+  applyJsonToUI(obj);
+  alert('読み込みました（ID: '+CURRENT_ID+'）。');
+}
+function exportJsonFile(){
+  const text = pretty();
+  const blob = new Blob([text], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const name = (document.getElementById('name').value||'character');
+  a.download = name + '.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+function importJsonFile(file){
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const data = JSON.parse(ev.target.result);
+      CURRENT_ID = data.id || CURRENT_ID || newId();
+      reflectIdPill();
+      applyJsonToUI(data);
+      saveToLocal(false);
+      alert('インポートが完了しました（ID: '+CURRENT_ID+'）。');
+    }catch(e){ alert('ファイルの解析に失敗しました: ' + e.message); }
+  };
+  reader.readAsText(file);
+}
+
+function applyJsonToUI(json){
+  const d = json && json.data ? json.data : json;
+  setVal('name', d.name || '新たな探索者');
+  const bi = (d.basicInfo || {});
+  document.getElementById('commonName').value = bi.commonName || '';
+  document.getElementById('specialName').value = bi.specialName || '';
+  document.getElementById('secretName').value = bi.secretName || '';
+  document.getElementById('bloodline').value = bi.bloodline || '';
+  document.getElementById('gender').value = bi.gender || '';
+  document.getElementById('age').value = bi.age || '';
+  document.getElementById('birthplace').value = bi.birthplace || '';
+  document.getElementById('territory').value = bi.territory || '';
+  document.getElementById('stressDisorder').value = bi.stressDisorder || '';
+  document.getElementById('basicNote').value = bi.note || '';
+
+  const map = {};
+  (d.params||[]).forEach(p=>{ if(p && p.label) map[p.label] = Number(p.value||0); });
+  ['STR','CON','POW','DEX','APP','SIZ','INT','EDU','SEN'].forEach(k=>{ if(map[k]!==undefined) setVal(k, map[k]); });
+  if(d.status && Array.isArray(d.status)){
+    d.status.forEach(s=>{
+      if(s.label==='HP') setVal('HP', s.value || 0);
+      if(s.label==='MP') setVal('MP', s.value || 0);
+      if(s.label==='SEN') setVal('SEN', s.value || 0);
+    });
+  }
+
+  if(d.derived){
+    setVal('IDEA', Number(d.derived.IDEA||0));
+    setVal('LUCK', Number(d.derived.LUCK||0));
+    setVal('KNOW', Number(d.derived.KNOW||0));
+    document.getElementById('DB').value = d.derived.DB || computeDBLabel(getNum('STR') + getNum('SIZ'));
+    setVal('SENmax', Number(d.derived.SENmax||0));
+  } else {
+    derive();
+  }
+
+  SKILLS = [];
+  if(d.skills && Array.isArray(d.skills)){
+    d.skills.forEach(s=>{
+      const cat = s.category || Object.keys(DEFAULT_CATEGORIES)[0];
+      const fixedFlag = s.fixed || isDefaultSkill(cat, s.name);
+      SKILLS.push({
+        name: s.name || '',
+        initialRaw: (s.initialRaw!=null ? s.initialRaw : String(s.initialValue||0)),
+        alloc: Number(s.alloc||0),
+        growth: Number(s.growth||0),
+        other: Number(s.other||0),
+        total: Number(s.total||0),
+        category: cat,
+        langInput: !!s.langInput,
+        langName: s.langName || '',
+        fixed: !!fixedFlag
+      });
+    });
+  }else{
+    resetSkills();
+  }
+
+  // memo sections
+  if(d.memoSections && Array.isArray(d.memoSections)){
+    MEMO_STATE = MEMO_DEFS.map(def=>{
+      const found = d.memoSections.find(ms => ms.id === def.id);
+      const fieldsObj = {};
+      def.fields.forEach(f=> fieldsObj[f.k] = (found && found.fields && found.fields[f.k]) ? String(found.fields[f.k]) : '');
+      return { id:def.id, title:def.title, visible: !!(found ? found.visible : true), collapsed: false, fields: fieldsObj };
+    });
+  } else {
+    initMemoState(true);
+  }
+
+  renderSkills();
+  renderMemoSections();
+  recalcAllSkills();
+  updateOut();
+}
+
+/* 表示ページへ遷移 */
+function openViewPage(){
+  saveToLocal(false);
+  reflectIdPill();
+  const url = 'view.html?id=' + encodeURIComponent(CURRENT_ID);
+  window.location.href = url;
+}
+
+/* イベントバインド */
+document.getElementById('rollAll').addEventListener('click', ()=>{ rollAll(); updateOut(); });
+document.getElementById('clearAll').addEventListener('click', ()=>{ clearAll(); updateOut(); });
+document.getElementById('derive').addEventListener('click', ()=>{ derive(); recalcAllSkills(); updateOut(); });
+document.getElementById('resetSkills').addEventListener('click', ()=>{ resetSkills(); updateOut(); });
+document.getElementById('gen').addEventListener('click', ()=>{ updateOut(); });
+document.getElementById('copy').addEventListener('click', ()=>{ navigator.clipboard.writeText(pretty()).then(()=>alert('JSONをコピーしました。'))});
+document.getElementById('download').addEventListener('click', ()=>{ exportJsonFile(); });
+document.getElementById('saveBtn').addEventListener('click', ()=>{ saveToLocal(true); });
+document.getElementById('loadBtn').addEventListener('click', ()=>{ loadFromLocal(); });
+document.getElementById('exportBtn').addEventListener('click', ()=>{ exportJsonFile(); });
+document.getElementById('importFile').addEventListener('change', (e)=>{ if(e.target.files && e.target.files[0]) importJsonFile(e.target.files[0]); });
+document.getElementById('viewBtn').addEventListener('click', ()=>{ openViewPage(); });
+
+document.getElementById('EDU').addEventListener('input', ()=>{ recalcAllSkills(); });
+['STR','CON','POW','DEX','APP','SIZ','INT'].forEach(id=>{ document.getElementById(id).addEventListener('input', ()=>{ recalcAllSkills(); }); });
+
+/* 初期化 */
+resetSkills();
+initMemoState();
+derive();
+recalcAllSkills();
+updateOut();
+reflectIdPill();
+
+/* ヘルパー（デフォルト技能判定） */
+function isDefaultSkill(category, name){
+  const arr = DEFAULT_CATEGORIES[category] || [];
+  return arr.some(s=> (s.name||'') === (name||''));
+}
+</script>
+</body>
+</html>

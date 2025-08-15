@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CatTulf — View (メモ表示対応)</title>
+  <style>
+    :root{--bg:#0b0c10;--card:#16171d;--muted:#8a8f98;--fg:#e7e9ee}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans JP",sans-serif;background:var(--bg);color:var(--fg)}
+    .wrap{max-width:1000px;margin:0 auto;padding:32px 24px}
+    h1{font-size:20px;margin:0 0 12px}
+    .card{background:var(--card);border:1px solid #20222b;border-radius:12px;padding:12px;margin-bottom:12px}
+    .muted{color:var(--muted)}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th,td{padding:8px;border-bottom:1px solid #242632;text-align:left;font-size:14px}
+    th{background:#0c0d11;color:var(--muted);font-weight:600}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0f1117;border:1px solid #2b2e39;border-radius:8px;padding:12px;max-height:360px;overflow:auto}
+    .id-pill{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1117;border:1px solid #2b2e39;color:#9aa0a8}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .small{font-size:12px;color:#9aa0a8}
+    .err{color:#ff6b6b}
+    .bi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .bi-full{grid-column:1/-1}
+    .derived{background:#23252a;padding:8px;border-radius:6px;color:#bfc6cf}
+    .memo-section{border:1px solid #222;padding:8px;border-radius:8px;margin-bottom:8px;background:#0f1117}
+    .memo-section h4{margin:0 0 6px}
+    .memo-field{margin-bottom:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between">
+      <h1 id="title">表示（読み取り専用）</h1>
+      <span id="idpill" class="id-pill">ID: ?</span>
+    </div>
+
+    <div id="root">
+      <div class="card"><div class="muted">読み込み中…</div></div>
+    </div>
+  </div>
+
+<script>
+const STORAGE_PREFIX = 'cattulf_v1_';
+function storageKey(id){ return STORAGE_PREFIX + id; }
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function getParam(name){ const u = new URL(location.href); return u.searchParams.get(name); }
+
+function computeInitialValue(initialRaw, paramsMap){
+  if(typeof initialRaw !== 'string') return Number(initialRaw) || 0;
+  const trimmed = initialRaw.trim();
+  if(trimmed === '') return 0;
+  if(/^[0-9]+$/.test(trimmed)) return Number(trimmed);
+  let replaced = trimmed.replace(/\{([A-Za-z0-9_]+)\}/g, (_, key)=>{
+    const v = paramsMap[key];
+    return (v !== undefined) ? String(Number(v)) : '0';
+  });
+  if(!/^[0-9+\-*/().\s]+$/.test(replaced)) return NaN;
+  try{ return Number(Function('"use strict"; return (' + replaced + ')')()); }catch(e){return NaN;}
+}
+
+function computeDBLabel(sum){
+  if(sum <= 12) return '-1d6';
+  if(sum <= 16) return '-1d4';
+  if(sum <= 24) return '0';
+  if(sum <= 32) return '+1d4';
+  if(sum <= 40) return '+1d6';
+  if(sum <= 56) return '+2d6';
+  if(sum <= 72) return '+3d6';
+  if(sum <= 88) return '+4d6';
+  if(sum <= 104) return '+5d6';
+  if(sum <= 120) return '+6d6';
+  if(sum <= 136) return '+7d6';
+  if(sum <= 152) return '+8d6';
+  if(sum <= 168) return '+9d6';
+  if(sum <= 184) return '+10d6';
+  let over = sum - 184;
+  let extra = Math.floor(over / 16) + 10;
+  return '+' + extra + 'd6';
+}
+
+function render(data){
+  const root = document.getElementById('root');
+  const d = data.data || data;
+  document.getElementById('title').textContent = '表示: ' + (d.name || '新たな探索者');
+
+  const bi = d.basicInfo || {};
+  const basicHtml = `
+    <div class="bi-grid">
+      <div><strong>普段使用する名前</strong><div>${escapeHtml(bi.commonName || '')}</div></div>
+      <div><strong>特別な名前</strong><div>${escapeHtml(bi.specialName || '')}</div></div>
+      <div><strong>秘密の名前</strong><div>${escapeHtml(bi.secretName || '')}</div></div>
+      <div><strong>血統</strong><div>${escapeHtml(bi.bloodline || '')}</div></div>
+      <div><strong>性別</strong><div>${escapeHtml(bi.gender || '')}</div></div>
+      <div><strong>年齢</strong><div>${escapeHtml(bi.age || '')}</div></div>
+      <div><strong>生まれた場所</strong><div>${escapeHtml(bi.birthplace || '')}</div></div>
+      <div><strong>縄張り</strong><div>${escapeHtml(bi.territory || '')}</div></div>
+      <div><strong>ストレス障害</strong><div>${escapeHtml(bi.stressDisorder || '')}</div></div>
+      <div class="bi-full"><strong>備考</strong><div>${escapeHtml(bi.note || '')}</div></div>
+    </div>`;
+
+  const pmap = {};
+  (d.params||[]).forEach(p=>{ if(p && p.label) pmap[p.label] = Number(p.value||0); });
+
+  let derived = d.derived || {};
+  if(!derived.IDEA) derived.IDEA = (pmap.INT||0) * 5;
+  if(!derived.LUCK) derived.LUCK = (pmap.POW||0) * 5;
+  if(!derived.KNOW) derived.KNOW = (pmap.EDU||0) * 5;
+  if(!derived.DB) derived.DB = computeDBLabel((pmap.STR||0) + (pmap.SIZ||0));
+  if(!derived.SENmax){
+    const cth = (d.derived && d.derived.cthulhuSkill) || (function(){
+      const skills = d.skills || [];
+      const s = skills.find(x => (x.name||'').trim() === 'クトゥルフ神話');
+      return s ? Number(s.total || 0) : 0;
+    })();
+    derived.SENmax = Math.max(0, 99 - cth);
+    derived.cthulhuSkill = derived.cthulhuSkill || cth;
+  }
+
+  let paramsRows = '';
+  (d.params||[]).forEach(p=>{ paramsRows += `<tr><td>${escapeHtml(p.label)}</td><td>${escapeHtml(String(p.value))}</td></tr>`; });
+
+  const derivedHtml = `<tr><td>アイデア</td><td class="derived">${escapeHtml(String(derived.IDEA))}</td></tr>
+  <tr><td>幸運</td><td class="derived">${escapeHtml(String(derived.LUCK))}</td></tr>
+  <tr><td>知識</td><td class="derived">${escapeHtml(String(derived.KNOW))}</td></tr>
+  <tr><td>ダメージボーナス (STR+SIZ)</td><td class="derived">${escapeHtml(String(derived.DB))}</td></tr>
+  <tr><td>SEN（現在 / 最大）</td><td class="derived">${escapeHtml(String((pmap.SEN||0) + ' / ' + derived.SENmax))}</td></tr>`;
+
+  let skillRows = '';
+  let shown = 0;
+  (d.skills||[]).forEach(s=>{
+    const init = (s.initialValue!=null) ? Number(s.initialValue) : computeInitialValue(s.initialRaw||String(s.initialValue||0), pmap);
+    const alloc = Number(s.alloc||0);
+    const growth = Number(s.growth||0);
+    const other = Number(s.other||0);
+    const total = Number(s.total|| (init+alloc+growth+other));
+    if(alloc>0){
+      shown++;
+      const label = s.langInput && s.langName ? `${s.name}（${s.langName}）` : s.name;
+      skillRows += `<tr>
+        <td>${escapeHtml(label||'')}</td>
+        <td>${escapeHtml(String(init))}</td>
+        <td>${escapeHtml(String(alloc))}</td>
+        <td>${escapeHtml(String(growth))}</td>
+        <td>${escapeHtml(String(other))}</td>
+        <td>${escapeHtml(String(total))}</td>
+      </tr>`;
+    }
+  });
+  if(shown===0) skillRows = `<tr><td colspan="6" class="small">割り振りされた技能はありません。</td></tr>`;
+
+  const cmds = (d.commands||'').split('\n').map(x=>x.trim()).filter(Boolean).join('\n');
+
+  // memo sections: only show those with visible === true
+  let memoHtml = '';
+  if(d.memoSections && Array.isArray(d.memoSections) && d.memoSections.length){
+    d.memoSections.forEach(ms=>{
+      if(!ms.visible) return;
+      memoHtml += `<div class="memo-section"><h4>${escapeHtml(ms.title)}</h4>`;
+      if(ms.fields){
+        Object.keys(ms.fields).forEach(k=>{
+          const val = ms.fields[k];
+          if(val === undefined || val === null || String(val).trim()==='') return;
+          memoHtml += `<div class="memo-field"><strong>${escapeHtml(k)}:</strong><div>${escapeHtml(String(val))}</div></div>`;
+        });
+      }
+      memoHtml += `</div>`;
+    });
+  } else {
+    // legacy: show top-level memo if exists
+    if(d.memo && String(d.memo).trim() !== '') memoHtml = `<div class="memo-section"><pre>${escapeHtml(d.memo)}</pre></div>`;
+  }
+
+  root.innerHTML = `
+    <div class="card"><div class="muted">基本情報</div>${basicHtml}</div>
+    <div class="card"><div class="muted">能力値・二次値</div><table><thead><tr><th>項目</th><th>値</th></tr></thead><tbody>${paramsRows}${derivedHtml}</tbody></table></div>
+    <div class="card"><div class="muted">割り振り済み技能（alloc&gt;0 のみ）</div><table><thead><tr><th>技能</th><th>初期</th><th>振り</th><th>成長</th><th>その他</th><th>合計</th></tr></thead><tbody>${skillRows}</tbody></table></div>
+    <div class="card"><div class="muted">コマンド（コピペしてココフォリアへ）</div><pre>${escapeHtml(cmds)}</pre></div>
+    <div class="card"><div class="muted">詳細メモ</div>${memoHtml || '<div class="small">表示許可されたメモがありません。</div>'}</div>
+    <div class="card"><div class="muted">メモ（従来）</div><pre>${escapeHtml(d.memo||'')}</pre></div>
+  `;
+}
+
+function main(){
+  const id = getParam('id');
+  document.getElementById('idpill').textContent = 'ID: ' + (id || '?');
+  if(!id){
+    document.getElementById('root').innerHTML = `<div class="card"><div class="err">id パラメータがありません。例: <code>view.html?id=cat-xxxx</code></div></div>`;
+    return;
+  }
+  const raw = localStorage.getItem(storageKey(id));
+  if(!raw){
+    document.getElementById('root').innerHTML = `<div class="card"><div class="err">ID「${escapeHtml(id)}」のデータが見つかりません。保存先の端末やIDをご確認ください。</div></div>`;
+    return;
+  }
+  try{
+    const obj = JSON.parse(raw);
+    render(obj);
+  }catch(e){
+    document.getElementById('root').innerHTML = `<div class="card"><div class="err">データの読み込みに失敗しました: ${escapeHtml(e.message||String(e))}</div></div>`;
+  }
+}
+
+main();
+</script>
+</body>
+</html>
